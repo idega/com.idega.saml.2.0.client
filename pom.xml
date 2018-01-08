@@ -11,6 +11,10 @@
   <inceptionYear>2018</inceptionYear>
   <description>SAML 2.0 client integration into ePlatform</description>
   <dependencies>
+  	<dependency>
+  		<groupId>com.idega.block.addon</groupId>
+  		<artifactId>com.idega.restful</artifactId>
+  	</dependency>
     <dependency>
     	<groupId>com.idega.block.egov</groupId>
     	<artifactId>is.idega.idegaweb.egov</artifactId>
