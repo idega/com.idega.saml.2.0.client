@@ -13,7 +13,7 @@
   <dependencies>
     <dependency>
     	<groupId>com.idega.block.egov</groupId>
-    	<artifactId>is.idega.idegaweb.egov.citizen</artifactId>
+    	<artifactId>is.idega.idegaweb.egov</artifactId>
     	<exclusions>
       	<exclusion>
       		<groupId>org.apache.ws.security</groupId>
@@ -24,10 +24,6 @@
 			<artifactId>xmlsec</artifactId>
 		</exclusion>
       </exclusions>
-    </dependency>
-    <dependency>
-      <groupId>com.idega.block.egov</groupId>
-      <artifactId>is.idega.webservice</artifactId>
     </dependency>
     
     <dependency>

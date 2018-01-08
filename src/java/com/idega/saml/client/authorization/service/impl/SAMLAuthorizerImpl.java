@@ -14,7 +14,6 @@ import javax.servlet.http.HttpServletResponse;
 import org.directwebremoting.annotations.Param;
 import org.directwebremoting.annotations.RemoteProxy;
 import org.directwebremoting.spring.SpringCreator;
-import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.beans.factory.config.BeanDefinition;
 import org.springframework.context.annotation.Scope;
 import org.springframework.stereotype.Service;
@@ -24,20 +23,17 @@ import com.idega.idegaweb.IWMainApplicationSettings;
 import com.idega.presentation.IWContext;
 import com.idega.saml.client.authorization.service.SAMLAuthorizer;
 import com.idega.saml.client.model.AuthorizationSettings;
-import com.idega.user.business.UserBusiness;
-import com.idega.user.data.User;
 import com.idega.util.CoreConstants;
 import com.idega.util.CoreUtil;
 import com.idega.util.ListUtil;
 import com.idega.util.StringHandler;
 import com.idega.util.StringUtil;
 import com.idega.util.datastructures.map.MapUtil;
-import com.idega.util.text.Name;
 import com.onelogin.saml2.Auth;
 import com.onelogin.saml2.settings.Saml2Settings;
 import com.onelogin.saml2.settings.SettingsBuilder;
 
-import is.idega.webservice.business.IslandDotIsService;
+import is.idega.idegaweb.egov.accounting.business.CitizenBusiness;
 
 @Service(SAMLAuthorizerImpl.BEAN_NAME)
 @Scope(BeanDefinition.SCOPE_SINGLETON)
@@ -49,9 +45,6 @@ public class SAMLAuthorizerImpl extends DefaultSpringBean implements SAMLAuthori
 
 	static final String BEAN_NAME = "samlAuthorizerImpl",
 						DWR_OBJECT = "SAMLAuthorizer";
-
-	@Autowired
-	private IslandDotIsService islandDotIsService;
 
 	@Override
 	public void doSendAuthorizationRequest(AuthorizationSettings settings, HttpServletRequest request, HttpServletResponse response, String type) throws Exception {
@@ -139,27 +132,13 @@ public class SAMLAuthorizerImpl extends DefaultSpringBean implements SAMLAuthori
 				return null;
 			}
 
-			UserBusiness userBusiness = getServiceInstance(UserBusiness.class);
-			User user = null;
-			try {
-				user = userBusiness.getUser(personalId);
-			} catch (Exception e) {}
-			if (user == null) {
-				Name name = new Name(fullName);
-				user = userBusiness.createUser(name.getFirstName(), name.getMiddleName(), name.getLastName(), personalId);
-				CoreUtil.clearAllCaches();
-			}
-			if (user == null) {
-				getLogger().warning("Failed to create user with personal ID: " + personalId + ", name: " + fullName);
-				return null;
-			}
-
-			islandDotIsService.getHomePageForCitizen(personalId, iwc);
+			CitizenBusiness citizenBusiness = getServiceInstance(CitizenBusiness.class);
+			String homePage = citizenBusiness.getHomePageForCitizen(iwc, personalId, fullName, "saml2_authorizer.home_page", getApplicationProperty("saml2_oauth.cookie"));
 
 			if (server.endsWith(CoreConstants.SLASH)) {
 				server = server.substring(0, server.length() - 1);
 			}
-			return server + "/#/dashboard";
+			return server + homePage;
 		} catch (Throwable e) {
 			getLogger().log(Level.WARNING, "Error processing response from IP: " + ip + ", hostname: " + hostname + ". SAML response:\n" + decodedSAMLResponse, e);
 		}
