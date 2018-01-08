@@ -177,7 +177,7 @@ public class SAMLAuthorizerImpl extends DefaultSpringBean implements SAMLAuthori
 		samlData.put(SettingsBuilder.IDP_SINGLE_SIGN_ON_SERVICE_URL_PROPERTY_KEY, singleSignOnService);
 
 		String acsURL = server.concat("/authorization/acs/");
-		if (!StringUtil.isEmpty(type)) {
+		if (!StringUtil.isEmpty(type) && !type.equals("default")) {
 			acsURL = acsURL.concat(type);
 			if (!acsURL.endsWith(CoreConstants.SLASH)) {
 				acsURL = acsURL.concat(CoreConstants.SLASH);
