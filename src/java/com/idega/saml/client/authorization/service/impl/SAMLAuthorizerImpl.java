@@ -11,9 +11,6 @@ import java.util.logging.Level;
 import javax.servlet.http.HttpServletRequest;
 import javax.servlet.http.HttpServletResponse;
 
-import org.directwebremoting.annotations.Param;
-import org.directwebremoting.annotations.RemoteProxy;
-import org.directwebremoting.spring.SpringCreator;
 import org.springframework.beans.factory.config.BeanDefinition;
 import org.springframework.context.annotation.Scope;
 import org.springframework.stereotype.Service;
@@ -35,16 +32,9 @@ import com.onelogin.saml2.settings.SettingsBuilder;
 
 import is.idega.idegaweb.egov.accounting.business.CitizenBusiness;
 
-@Service(SAMLAuthorizerImpl.BEAN_NAME)
+@Service
 @Scope(BeanDefinition.SCOPE_SINGLETON)
-@RemoteProxy(creator=SpringCreator.class, creatorParams={
-		@Param(name="beanName", value=SAMLAuthorizerImpl.BEAN_NAME),
-		@Param(name="javascript", value=SAMLAuthorizerImpl.DWR_OBJECT)
-	}, name=SAMLAuthorizerImpl.DWR_OBJECT)
 public class SAMLAuthorizerImpl extends DefaultSpringBean implements SAMLAuthorizer {
-
-	static final String BEAN_NAME = "samlAuthorizerImpl",
-						DWR_OBJECT = "SAMLAuthorizer";
 
 	@Override
 	public void doSendAuthorizationRequest(AuthorizationSettings settings, HttpServletRequest request, HttpServletResponse response, String type) throws Exception {
@@ -55,6 +45,8 @@ public class SAMLAuthorizerImpl extends DefaultSpringBean implements SAMLAuthori
 
 		String authGateway = settings.getRemoteLoginService();
 		String returnURL = settings.getRemoteLoginReturn();
+
+		getLogger().info("authGateway: " + authGateway + ", returnURL: " + returnURL + ", type: " + type);
 
 		Saml2Settings samlSettings = getSAMLSettings(request, type);
 		if (samlSettings == null) {
@@ -132,8 +124,7 @@ public class SAMLAuthorizerImpl extends DefaultSpringBean implements SAMLAuthori
 				return null;
 			}
 
-			CitizenBusiness citizenBusiness = getServiceInstance(CitizenBusiness.class);
-			String homePage = citizenBusiness.getHomePageForCitizen(iwc, personalId, fullName, "saml2_authorizer.home_page", getApplicationProperty("saml2_oauth.cookie"));
+			String homePage = getHomePage(iwc, personalId, fullName);
 
 			if (server.endsWith(CoreConstants.SLASH)) {
 				server = server.substring(0, server.length() - 1);
@@ -146,11 +137,18 @@ public class SAMLAuthorizerImpl extends DefaultSpringBean implements SAMLAuthori
 		return null;
 	}
 
+	private String getHomePage(IWContext iwc, String personalId, String fullName) {
+		CitizenBusiness citizenBusiness = getServiceInstance(iwc, CitizenBusiness.class);
+		return citizenBusiness.getHomePageForCitizen(iwc, personalId, fullName, "saml2_authorizer.home_page", getApplicationProperty("saml2_oauth.cookie"));
+	}
+
 	private Saml2Settings getSAMLSettings(HttpServletRequest request, String type) {
-		String server = CoreUtil.getServerURL(request);
+		String server = CoreUtil.getHost(false);
 		if (server == null) {
 			getLogger().warning("Server is unknown");
 			return null;
+		} else {
+			getLogger().info("Service for SAML settings: " + server);	//	TODO
 		}
 
 		server = server.toLowerCase();
@@ -168,6 +166,7 @@ public class SAMLAuthorizerImpl extends DefaultSpringBean implements SAMLAuthori
 
 		String spProviderProp = SettingsBuilder.SP_ENTITYID_PROPERTY_KEY + (StringUtil.isEmpty(type) ? CoreConstants.EMPTY : CoreConstants.UNDER.concat(type));
 		String serviceProviderId = appSettings.getProperty(spProviderProp, server);
+		getLogger().info("Service provider ID for type " + type + ": " + serviceProviderId);
 		samlData.put(SettingsBuilder.SP_ENTITYID_PROPERTY_KEY, serviceProviderId);
 
 		String identificationProviderId = appSettings.getProperty(SettingsBuilder.IDP_ENTITYID_PROPERTY_KEY);
@@ -193,6 +192,7 @@ public class SAMLAuthorizerImpl extends DefaultSpringBean implements SAMLAuthori
 			return null;
 		}
 
+		getLogger().info("Return url: " + url + " for type " + type);
 		samlData.put(SettingsBuilder.SP_ASSERTION_CONSUMER_SERVICE_URL_PROPERTY_KEY, url);
 
 		samlData.put(SettingsBuilder.SECURITY_WANT_XML_VALIDATION, appSettings.getBoolean(SettingsBuilder.SECURITY_WANT_XML_VALIDATION, true));
