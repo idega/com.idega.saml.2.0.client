@@ -1,7 +1,11 @@
 package com.idega.saml.client.authorization.service.impl;
 
+import java.io.ByteArrayInputStream;
+import java.io.InputStream;
 import java.net.MalformedURLException;
 import java.net.URL;
+import java.security.cert.Certificate;
+import java.security.cert.CertificateFactory;
 import java.util.Base64;
 import java.util.HashMap;
 import java.util.List;
@@ -14,6 +18,7 @@ import javax.servlet.http.HttpServletResponse;
 import org.springframework.beans.factory.config.BeanDefinition;
 import org.springframework.context.annotation.Scope;
 import org.springframework.stereotype.Service;
+import org.springframework.util.Base64Utils;
 
 import com.idega.core.business.DefaultSpringBean;
 import com.idega.idegaweb.IWMainApplicationSettings;
@@ -22,6 +27,7 @@ import com.idega.saml.client.authorization.service.SAMLAuthorizer;
 import com.idega.saml.client.model.AuthorizationSettings;
 import com.idega.util.CoreConstants;
 import com.idega.util.CoreUtil;
+import com.idega.util.IOUtil;
 import com.idega.util.ListUtil;
 import com.idega.util.StringHandler;
 import com.idega.util.StringUtil;
@@ -201,16 +207,52 @@ public class SAMLAuthorizerImpl extends DefaultSpringBean implements SAMLAuthori
 		samlData.put(SettingsBuilder.SECURITY_REQUESTED_AUTHNCONTEXT, appSettings.getProperty(SettingsBuilder.SECURITY_REQUESTED_AUTHNCONTEXT, "urn:oasis:names:tc:SAML:2.0:ac:classes:unspecified"));
 		samlData.put(SettingsBuilder.SECURITY_REQUESTED_AUTHNCONTEXTCOMPARISON, appSettings.getProperty(SettingsBuilder.SECURITY_REQUESTED_AUTHNCONTEXTCOMPARISON, "minimum"));
 
-//		Certificate certificate = getCertificate("flen.idega.is.crt");
-//		if (certificate != null) {
-//			samlData.put("onelogin.saml2.sp.x509cert", certificate);
-//			samlData.put("onelogin.saml2.idp.x509cert", certificate);
-//		}
-		samlData.put(SettingsBuilder.CERTFINGERPRINT_PROPERTY_KEY, Boolean.FALSE.toString());
+		Certificate certificate = getCertificate();
+		if (certificate == null) {
+			samlData.put(SettingsBuilder.CERTFINGERPRINT_PROPERTY_KEY, Boolean.FALSE.toString());
+		} else {
+			samlData.put(SettingsBuilder.IDP_X509CERT_PROPERTY_KEY, certificate);
+		}
 
 		SettingsBuilder builder = new SettingsBuilder();
 		Saml2Settings settings = builder.fromValues(samlData).build();
 		return settings;
+	}
+
+	private Certificate getCertificate() {
+		return getCertificate(true);
+	}
+
+	private Certificate getCertificate(boolean reTryWithDecoded) {
+		InputStream stream = null;
+		String bundleIdentifierProp = null, pathWithinBundle = null;
+
+		try {
+			bundleIdentifierProp = getApplicationProperty("saml2.cert_bundle_id");
+			pathWithinBundle = getApplicationProperty("saml2.cert_path_within_bundle");
+			if (StringUtil.isEmpty(bundleIdentifierProp) || StringUtil.isEmpty(pathWithinBundle)) {
+				return null;
+			}
+
+			stream = IOUtil.getStreamFromJar(bundleIdentifierProp, pathWithinBundle);
+			if (!reTryWithDecoded) {
+				String content = StringHandler.getContentFromInputStream(stream);
+				IOUtil.closeInputStream(stream);
+				stream = new ByteArrayInputStream(Base64Utils.decode(content.getBytes(CoreConstants.ENCODING_UTF8)));
+			}
+			CertificateFactory certFactory = CertificateFactory.getInstance("X.509");
+			return certFactory.generateCertificate(stream);
+		} catch (Exception e) {
+			if (reTryWithDecoded) {
+				return getCertificate(false);
+			}
+
+			getLogger().log(Level.WARNING, "Error getting certificate " + pathWithinBundle + " from bundle " + bundleIdentifierProp, e);
+		} finally {
+			IOUtil.close(stream);
+		}
+
+		return null;
 	}
 
 }
