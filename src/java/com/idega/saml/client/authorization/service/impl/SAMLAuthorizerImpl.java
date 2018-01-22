@@ -153,8 +153,6 @@ public class SAMLAuthorizerImpl extends DefaultSpringBean implements SAMLAuthori
 		if (server == null) {
 			getLogger().warning("Server is unknown");
 			return null;
-		} else {
-			getLogger().info("Service for SAML settings: " + server);	//	TODO
 		}
 
 		server = server.toLowerCase();
