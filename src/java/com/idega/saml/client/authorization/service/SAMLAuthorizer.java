@@ -11,4 +11,6 @@ public interface SAMLAuthorizer {
 
 	public String getRedirectURLAfterProcessedResponse(HttpServletRequest request, HttpServletResponse response, String type);
 
+	public void doSendLogoutRequest(AuthorizationSettings settings, HttpServletRequest request, HttpServletResponse response) throws Exception;
+
 }
