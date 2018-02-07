@@ -13,4 +13,6 @@ public interface SAMLAuthorizer {
 
 	public void doSendLogoutRequest(AuthorizationSettings settings, HttpServletRequest request, HttpServletResponse response) throws Exception;
 
+	public boolean isDebug();
+
 }

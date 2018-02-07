@@ -70,4 +70,9 @@ public class AuthorizationSettings implements Serializable {
 		this.type = type;
 	}
 
+	@Override
+	public String toString() {
+		return "Auth. type: " + getType();
+	}
+
 }

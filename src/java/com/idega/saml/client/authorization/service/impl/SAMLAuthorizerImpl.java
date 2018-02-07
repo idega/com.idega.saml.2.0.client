@@ -20,6 +20,9 @@ import org.springframework.context.annotation.Scope;
 import org.springframework.stereotype.Service;
 import org.springframework.util.Base64Utils;
 
+import com.idega.core.accesscontrol.business.LoggedOnInfo;
+import com.idega.core.accesscontrol.business.LoginBusinessBean;
+import com.idega.core.accesscontrol.event.LoggedInUserCredentials.LoginType;
 import com.idega.core.business.DefaultSpringBean;
 import com.idega.idegaweb.IWMainApplicationSettings;
 import com.idega.presentation.IWContext;
@@ -43,6 +46,11 @@ import is.idega.idegaweb.egov.accounting.business.CitizenBusiness;
 public class SAMLAuthorizerImpl extends DefaultSpringBean implements SAMLAuthorizer {
 
 	@Override
+	public boolean isDebug() {
+		return getSettings().getBoolean("saml_debug", false);
+	}
+
+	@Override
 	public void doSendAuthorizationRequest(AuthorizationSettings settings, HttpServletRequest request, HttpServletResponse response, String type) throws Exception {
 		if (settings == null || request == null || response == null) {
 			getLogger().warning("Invalid parameters");
@@ -52,7 +60,9 @@ public class SAMLAuthorizerImpl extends DefaultSpringBean implements SAMLAuthori
 		String authGateway = settings.getRemoteLoginService();
 		String returnURL = settings.getRemoteLoginReturn();
 
-		getLogger().info("authGateway: " + authGateway + ", returnURL: " + returnURL + ", type: " + type);
+		if (isDebug()) {
+			getLogger().info("authGateway: " + authGateway + ", returnURL: " + returnURL + ", type: " + type);
+		}
 
 		Saml2Settings samlSettings = getSAMLSettings(request, type);
 		if (samlSettings == null) {
@@ -71,27 +81,37 @@ public class SAMLAuthorizerImpl extends DefaultSpringBean implements SAMLAuthori
 			IWContext iwc = CoreUtil.getIWContext();
 			ip = iwc == null ? null : iwc.getRemoteIpAddress();
 			hostname = iwc == null ? null : iwc.getRemoteHostName();
-			getLogger().info("Received request (" + request.getRequestURI() + ") via " + request.getMethod() + " from IP: " + ip + " and hostname: " + hostname +
-					". Type: " + (StringUtil.isEmpty(type) ? "default" : type));
+			if (isDebug()) {
+				getLogger().info("Received request (" + request.getRequestURI() + ") via " + request.getMethod() + " from IP: " + ip + " and hostname: " + hostname +
+						". Type: " + (StringUtil.isEmpty(type) ? "unknown" : type));
+			}
 
 			Saml2Settings settings = getSAMLSettings(request, type);
 			Auth auth = new Auth(settings, request, response);
 
 			String samlResponseParameter = request.getParameter("SAMLResponse");
-			getLogger().info("Starting to process response:\n" + samlResponseParameter);
+			if (isDebug()) {
+				getLogger().info("Starting to process response:\n" + samlResponseParameter);
+			}
 			if (!StringUtil.isEmpty(samlResponseParameter)) {
 				decodedSAMLResponse = new String(Base64.getDecoder().decode(samlResponseParameter.getBytes(CoreConstants.ENCODING_UTF8)), CoreConstants.ENCODING_UTF8);
 			}
 
 			auth.processResponse();
 
-			getLogger().info("Finished processing response:\n" + decodedSAMLResponse);
+			if (isDebug()) {
+				getLogger().info("Finished processing response:\n" + decodedSAMLResponse);
+			}
 
 			List<String> errors = auth.getErrors();
 			if (ListUtil.isEmpty(errors)) {
-				getLogger().info("No errors in\n" + decodedSAMLResponse);
+				if (isDebug()) {
+					getLogger().info("No errors in\n" + decodedSAMLResponse);
+				}
 			} else {
-				getLogger().warning("Failed to authenticate via SAML. Error(s):\n" + errors + "\nResponse:\n" + decodedSAMLResponse);
+				if (isDebug()) {
+					getLogger().warning("Failed to authenticate via SAML. Error(s):\n" + errors + "\nResponse:\n" + decodedSAMLResponse);
+				}
 				return null;
 			}
 
@@ -107,7 +127,9 @@ public class SAMLAuthorizerImpl extends DefaultSpringBean implements SAMLAuthori
 				return null;
 			}
 
-			getLogger().info("Attributes in response from SAML:\n" + attributes);	//	TODO
+			if (isDebug()) {
+				getLogger().info("Attributes in response from SAML:\n" + attributes);
+			}
 			List<String> personalIds = attributes.get("urn:oid:1.3.6.1.4.1.2428.90.1.5");
 			if (ListUtil.isEmpty(personalIds)) {
 				getLogger().warning("Failed to get personal ID of authenticated person from SAML response:\n" + auth.getLastResponseXML());
@@ -131,6 +153,26 @@ public class SAMLAuthorizerImpl extends DefaultSpringBean implements SAMLAuthori
 			}
 
 			String homePage = getHomePage(iwc, personalId, fullName);
+			if (StringUtil.isEmpty(homePage)) {
+				getLogger().warning("Failed to get home page for " + fullName + " (personal ID: " + personalId + "). Login type: " + type);
+				return null;
+			}
+
+			boolean loginTypeStored = false;
+			if (!StringUtil.isEmpty(type) && iwc.isLoggedOn()) {
+				LoggedOnInfo loggedOnInfo = LoginBusinessBean.getLoggedOnInfo(iwc);
+				if (loggedOnInfo != null) {
+					loggedOnInfo.setLoginType(type.concat(CoreConstants.AT).concat(LoginType.AUTHENTICATION_GATEWAY.toString()));
+					loginTypeStored = true;
+				}
+			}
+			if (isDebug()) {
+				if (loginTypeStored) {
+					getLogger().info("Login type '" + type + "' stored");
+				} else {
+					getLogger().warning("Login type '" + type + "' was not stored");
+				}
+			}
 
 			if (server.endsWith(CoreConstants.SLASH)) {
 				server = server.substring(0, server.length() - 1);
@@ -170,7 +212,9 @@ public class SAMLAuthorizerImpl extends DefaultSpringBean implements SAMLAuthori
 
 		String spProviderProp = SettingsBuilder.SP_ENTITYID_PROPERTY_KEY + (StringUtil.isEmpty(type) ? CoreConstants.EMPTY : CoreConstants.UNDER.concat(type));
 		String serviceProviderId = appSettings.getProperty(spProviderProp, server);
-		getLogger().info("Service provider ID for type " + type + ": " + serviceProviderId);
+		if (isDebug()) {
+			getLogger().info("Service provider ID for type " + type + ": " + serviceProviderId);
+		}
 		samlData.put(SettingsBuilder.SP_ENTITYID_PROPERTY_KEY, serviceProviderId);
 
 		String identificationProviderId = appSettings.getProperty(SettingsBuilder.IDP_ENTITYID_PROPERTY_KEY);
@@ -196,7 +240,9 @@ public class SAMLAuthorizerImpl extends DefaultSpringBean implements SAMLAuthori
 			return null;
 		}
 
-		getLogger().info("Return url: " + url + " for type " + type);
+		if (isDebug()) {
+			getLogger().info("Return url: " + url + " for type " + type);
+		}
 		samlData.put(SettingsBuilder.SP_ASSERTION_CONSUMER_SERVICE_URL_PROPERTY_KEY, url);
 
 		samlData.put(SettingsBuilder.SECURITY_WANT_XML_VALIDATION, appSettings.getBoolean(SettingsBuilder.SECURITY_WANT_XML_VALIDATION, true));

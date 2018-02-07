@@ -52,7 +52,9 @@ public class SAMLAuthorizationServlet extends DefaultRestfulServlet {
 		type = type == null ? type : StringHandler.replace(type, CoreConstants.SLASH, CoreConstants.EMPTY);
 		type = StringUtil.isEmpty(type) ? null : type;
 
-		Logger.getLogger(getClass().getName()).info("Type: " + type);
+		if (getAuthorizer().isDebug()) {
+			Logger.getLogger(getClass().getName()).info("Type: " + type);
+		}
 
 		String url = getAuthorizer().getRedirectURLAfterProcessedResponse(request, response, type);
 		if (StringUtil.isEmpty(url)) {
