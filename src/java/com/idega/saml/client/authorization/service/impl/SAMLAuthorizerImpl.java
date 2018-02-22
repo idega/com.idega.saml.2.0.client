@@ -20,6 +20,7 @@ import org.springframework.context.annotation.Scope;
 import org.springframework.stereotype.Service;
 import org.springframework.util.Base64Utils;
 
+import com.idega.block.sso.model.AuthorizationSettings;
 import com.idega.core.accesscontrol.business.LoggedOnInfo;
 import com.idega.core.accesscontrol.business.LoginBusinessBean;
 import com.idega.core.accesscontrol.event.LoggedInUserCredentials.LoginType;
@@ -27,7 +28,6 @@ import com.idega.core.business.DefaultSpringBean;
 import com.idega.idegaweb.IWMainApplicationSettings;
 import com.idega.presentation.IWContext;
 import com.idega.saml.client.authorization.service.SAMLAuthorizer;
-import com.idega.saml.client.model.AuthorizationSettings;
 import com.idega.util.CoreConstants;
 import com.idega.util.CoreUtil;
 import com.idega.util.IOUtil;

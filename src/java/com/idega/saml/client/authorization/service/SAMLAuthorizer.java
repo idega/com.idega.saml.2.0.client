@@ -3,7 +3,7 @@ package com.idega.saml.client.authorization.service;
 import javax.servlet.http.HttpServletRequest;
 import javax.servlet.http.HttpServletResponse;
 
-import com.idega.saml.client.model.AuthorizationSettings;
+import com.idega.block.sso.model.AuthorizationSettings;
 
 public interface SAMLAuthorizer {
 
