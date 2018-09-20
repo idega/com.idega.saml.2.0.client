@@ -1,6 +1,7 @@
 package com.idega.saml.client.authorization.servlet;
 
 import java.io.IOException;
+import java.util.Enumeration;
 import java.util.logging.Logger;
 
 import javax.servlet.FilterChain;
@@ -19,6 +20,7 @@ import com.idega.util.CoreConstants;
 import com.idega.util.CoreUtil;
 import com.idega.util.StringHandler;
 import com.idega.util.StringUtil;
+import com.idega.util.WebUtil;
 import com.idega.util.expression.ELUtil;
 
 public class SAMLAuthorizationServlet extends DefaultRestfulServlet {
@@ -28,11 +30,21 @@ public class SAMLAuthorizationServlet extends DefaultRestfulServlet {
 	@Autowired
 	private SAMLAuthorizer authorizer;
 
+	@Autowired
+	private WebUtil webUtil;
+
 	private SAMLAuthorizer getAuthorizer() {
 		if (authorizer == null) {
 			ELUtil.getInstance().autowire(this);
 		}
 		return authorizer;
+	}
+
+	private WebUtil getWebUtil() {
+		if (webUtil == null) {
+			ELUtil.getInstance().autowire(this);
+		}
+		return webUtil;
 	}
 
 	@Override
@@ -48,20 +60,65 @@ public class SAMLAuthorizationServlet extends DefaultRestfulServlet {
 		}
 
 		String requestURI = request.getRequestURI();
-		String type = StringHandler.replace(requestURI, "/authorization/acs", CoreConstants.EMPTY);
-		type = type == null ? type : StringHandler.replace(type, CoreConstants.SLASH, CoreConstants.EMPTY);
-		type = StringUtil.isEmpty(type) ? null : type;
 
-		if (getAuthorizer().isDebug()) {
-			Logger.getLogger(getClass().getName()).info("Type: " + type);
+		boolean debug = getAuthorizer().isDebug();
+		Logger logger = debug ? Logger.getLogger(getClass().getName()) : null;
+
+		boolean login = isLogin(requestURI);
+		boolean logout = isLogout(requestURI);
+		if (debug) {
+			logger.info("Request URI: " + requestURI + ", login: " + login + ", logout: " + logout);
 		}
 
-		String url = getAuthorizer().getRedirectURLAfterProcessedResponse(request, response, type);
-		if (StringUtil.isEmpty(url)) {
-			url = CoreUtil.getServerURL(request);
+		if (login) {
+			String type = StringHandler.replace(requestURI, "/authorization/acs", CoreConstants.EMPTY);
+			type = type == null ? type : StringHandler.replace(type, CoreConstants.SLASH, CoreConstants.EMPTY);
+			type = StringUtil.isEmpty(type) ? null : type;
+
+			if (debug) {
+				logger.info("Type: " + type);
+			}
+
+			String url = getAuthorizer().getRedirectURLAfterProcessedResponse(request, response, type);
+			if (StringUtil.isEmpty(url)) {
+				url = CoreUtil.getServerURL(request);
+			}
+
+			response.sendRedirect(url);
+		} else if (logout) {
+			if (debug) {
+				Enumeration<String> params = iwc.getParameterNames();
+				if (params != null) {
+					while (params.hasMoreElements()) {
+						String param = params.nextElement();
+						String value = iwc.getParameter(param);
+						logger.info("Param '" + param + "' = '" + value + "'");
+					}
+				}
+			}
+
+			if (iwc.isLoggedOn()) {
+				getWebUtil().logOut();
+			}
+
+			response.sendRedirect(CoreConstants.SLASH);
+		}
+	}
+
+	private boolean isLogin(String uri) {
+		if (StringUtil.isEmpty(uri)) {
+			return false;
 		}
 
-		response.sendRedirect(url);
+		return uri.startsWith("/authorization/acs");
+	}
+
+	private boolean isLogout(String uri) {
+		if (StringUtil.isEmpty(uri)) {
+			return false;
+		}
+
+		return uri.startsWith("/authorization/slo");
 	}
 
 	private boolean isValidURI(String uri) {
@@ -69,7 +126,7 @@ public class SAMLAuthorizationServlet extends DefaultRestfulServlet {
 			return false;
 		}
 
-		return uri.startsWith("/authorization/slo") || uri.startsWith("/authorization/acs");
+		return isLogin(uri) || isLogout(uri);
 	}
 
 	@Override
