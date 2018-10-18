@@ -366,7 +366,12 @@ public class SAMLAuthorizerImpl extends DefaultSpringBean implements SAMLAuthori
 		samlData.put(SettingsBuilder.SECURITY_REQUESTED_AUTHNCONTEXT, appSettings.getProperty(SettingsBuilder.SECURITY_REQUESTED_AUTHNCONTEXT, "urn:oasis:names:tc:SAML:2.0:ac:classes:unspecified"));
 		samlData.put(SettingsBuilder.SECURITY_REQUESTED_AUTHNCONTEXTCOMPARISON, appSettings.getProperty(SettingsBuilder.SECURITY_REQUESTED_AUTHNCONTEXTCOMPARISON, "minimum"));
 
-		samlData.put(SettingsBuilder.IDP_SINGLE_LOGOUT_SERVICE_URL_PROPERTY_KEY, identificationProviderId);
+		String logoutURL = appSettings.getProperty(SettingsBuilder.IDP_SINGLE_LOGOUT_SERVICE_URL_PROPERTY_KEY);
+		if (StringUtil.isEmpty(logoutURL)) {
+			getLogger().warning("Unknown logout URL, using " + identificationProviderId);
+			logoutURL = identificationProviderId;
+		}
+		samlData.put(SettingsBuilder.IDP_SINGLE_LOGOUT_SERVICE_URL_PROPERTY_KEY, logoutURL);
 
 		Certificate certificate = getCertificate();
 		if (certificate == null) {
