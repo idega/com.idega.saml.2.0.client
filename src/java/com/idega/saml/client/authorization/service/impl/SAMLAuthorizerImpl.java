@@ -4,8 +4,11 @@ import java.io.ByteArrayInputStream;
 import java.io.InputStream;
 import java.net.MalformedURLException;
 import java.net.URL;
+import java.security.KeyFactory;
+import java.security.PrivateKey;
 import java.security.cert.Certificate;
 import java.security.cert.CertificateFactory;
+import java.security.spec.PKCS8EncodedKeySpec;
 import java.util.ArrayList;
 import java.util.Base64;
 import java.util.HashMap;
@@ -307,18 +310,16 @@ public class SAMLAuthorizerImpl extends DefaultSpringBean implements SAMLAuthori
 			return null;
 		}
 
+		boolean debug = isDebug();
 		server = server.toLowerCase();
-		if (!server.startsWith("https://")) {
+		if (server.startsWith("http://")) {
 			server = StringHandler.replace(server, "http://", "https://");
 		}
-
 		if (server.endsWith(CoreConstants.SLASH)) {
 			server = server.substring(0, server.length() - 1);
 		}
-
-		boolean debug = isDebug();
 		if (debug) {
-			getLogger().info("Server: " + server);
+			getLogger().info("Server: '" + server + "'");
 		}
 
 		IWMainApplicationSettings appSettings = getSettings();
@@ -372,8 +373,39 @@ public class SAMLAuthorizerImpl extends DefaultSpringBean implements SAMLAuthori
 			logoutURL = identificationProviderId;
 		}
 		samlData.put(SettingsBuilder.IDP_SINGLE_LOGOUT_SERVICE_URL_PROPERTY_KEY, logoutURL);
+		Boolean signLogout = appSettings.getBoolean(SettingsBuilder.SECURITY_LOGOUTREQUEST_SIGNED, Boolean.TRUE);
+		if (signLogout != null) {
+			samlData.put(SettingsBuilder.SECURITY_LOGOUTREQUEST_SIGNED, signLogout);
+			if (signLogout) {
+				Certificate logoutCertificate = getCertificate("saml2.cert_bundle_id", "saml2.logout_cert_path_within_bundle");
+				samlData.put(SettingsBuilder.SP_X509CERT_PROPERTY_KEY, logoutCertificate);
 
-		Certificate certificate = getCertificate();
+				String spPathToPrivateKey = appSettings.getProperty("saml2.logout_cert_key");
+				if (!StringUtil.isEmpty(spPathToPrivateKey)) {
+					try {
+						String spPrivateKey = StringHandler.getContentFromInputStream(
+								IOUtil.getStreamFromJar(appSettings.getProperty("saml2.cert_bundle_id"), spPathToPrivateKey)
+						);
+						if (!StringUtil.isEmpty(spPrivateKey)) {
+							spPrivateKey = spPrivateKey.replace("-----BEGIN PRIVATE KEY-----", CoreConstants.EMPTY);
+							spPrivateKey = spPrivateKey.replace("-----END PRIVATE KEY-----", CoreConstants.EMPTY);
+							spPrivateKey = spPrivateKey.replaceAll("\\s+", CoreConstants.EMPTY);
+
+							byte[] spPrivateKeyEncodedBytes = Base64.getDecoder().decode(spPrivateKey);
+
+					        PKCS8EncodedKeySpec keySpec = new PKCS8EncodedKeySpec(spPrivateKeyEncodedBytes);
+					        KeyFactory kf = KeyFactory.getInstance("RSA");
+					        PrivateKey privKey = kf.generatePrivate(keySpec);
+							samlData.put(SettingsBuilder.SP_PRIVATEKEY_PROPERTY_KEY, privKey);
+						}
+					} catch (Exception e) {
+						getLogger().log(Level.WARNING, "Error getting private key", e);
+					}
+				}
+			}
+		}
+
+		Certificate certificate = getCertificate("saml2.cert_bundle_id", "saml2.cert_path_within_bundle");
 		if (certificate == null) {
 			if (debug) {
 				getLogger().info("Certificate is not available for login type " + type);
@@ -391,17 +423,17 @@ public class SAMLAuthorizerImpl extends DefaultSpringBean implements SAMLAuthori
 		return settings;
 	}
 
-	private Certificate getCertificate() {
-		return getCertificate(true);
+	private Certificate getCertificate(String bundleIdentifierPropValue, String pathWithinBundlePropValue) {
+		return getCertificate(bundleIdentifierPropValue, pathWithinBundlePropValue, true);
 	}
 
-	private Certificate getCertificate(boolean reTryWithDecoded) {
+	private Certificate getCertificate(String bundleIdentifierPropValue, String pathWithinBundlePropValue, boolean reTryWithDecoded) {
 		InputStream stream = null;
 		String bundleIdentifierProp = null, pathWithinBundle = null;
 
 		try {
-			bundleIdentifierProp = getApplicationProperty("saml2.cert_bundle_id");
-			pathWithinBundle = getApplicationProperty("saml2.cert_path_within_bundle");
+			bundleIdentifierProp = getApplicationProperty(bundleIdentifierPropValue);
+			pathWithinBundle = getApplicationProperty(pathWithinBundlePropValue);
 			if (StringUtil.isEmpty(bundleIdentifierProp) || StringUtil.isEmpty(pathWithinBundle)) {
 				return null;
 			}
@@ -416,7 +448,7 @@ public class SAMLAuthorizerImpl extends DefaultSpringBean implements SAMLAuthori
 			return certFactory.generateCertificate(stream);
 		} catch (Exception e) {
 			if (reTryWithDecoded) {
-				return getCertificate(false);
+				return getCertificate(bundleIdentifierPropValue, pathWithinBundlePropValue, false);
 			}
 
 			getLogger().log(Level.WARNING, "Error getting certificate " + pathWithinBundle + " from bundle " + bundleIdentifierProp, e);
