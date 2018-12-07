@@ -27,6 +27,8 @@ public class SAMLAuthorizationServlet extends DefaultRestfulServlet {
 
 	private static final long serialVersionUID = 7664332448984779082L;
 
+	private static final Logger LOGGER = Logger.getLogger(SAMLAuthorizationServlet.class.getName());
+
 	@Autowired
 	private SAMLAuthorizer authorizer;
 
@@ -47,13 +49,56 @@ public class SAMLAuthorizationServlet extends DefaultRestfulServlet {
 		return webUtil;
 	}
 
+	private void doLogout(IWContext iwc, HttpServletResponse response) throws ServletException, IOException {
+		if (getAuthorizer().isDebug()) {
+			Enumeration<String> params = iwc.getParameterNames();
+			if (params != null) {
+				while (params.hasMoreElements()) {
+					String param = params.nextElement();
+					String value = iwc.getParameter(param);
+					LOGGER.info("Param '" + param + "' = '" + value + "'");
+				}
+			}
+		}
+
+		if (iwc.isLoggedOn()) {
+			getWebUtil().logOut();
+		}
+
+		response.sendRedirect(CoreConstants.SLASH);
+	}
+
+	private void doLogin(HttpServletRequest request, HttpServletResponse response, String requestURI) throws ServletException, IOException {
+		String type = StringHandler.replace(requestURI, "/authorization/acs", CoreConstants.EMPTY);
+		type = type == null ? type : StringHandler.replace(type, CoreConstants.SLASH, CoreConstants.EMPTY);
+		type = StringUtil.isEmpty(type) ? null : type;
+		if (StringUtil.isEmpty(type)) {
+			type = request.getParameter("type");
+		}
+
+		if (getAuthorizer().isDebug()) {
+			LOGGER.info("Type: " + type);
+		}
+
+		String url = getAuthorizer().getRedirectURLAfterProcessedResponse(request, response, type);
+		if (StringUtil.isEmpty(url)) {
+			url = CoreUtil.getServerURL(request);
+		}
+
+		response.sendRedirect(url);
+	}
+
 	@Override
 	protected void doGet(HttpServletRequest request, HttpServletResponse response) throws ServletException, IOException {
-		doPost(request, response);
+		doHandleRequest(request, response);
 	}
 
 	@Override
 	protected void doPost(HttpServletRequest request, HttpServletResponse response) throws ServletException, IOException {
+		doHandleRequest(request, response);
+	}
+
+	private void doHandleRequest(HttpServletRequest request, HttpServletResponse response) throws ServletException, IOException {
 		IWContext iwc = CoreUtil.getIWContext();
 		if (iwc == null) {
 			iwc = new IWContext(request, response, getServletContext());
@@ -62,46 +107,17 @@ public class SAMLAuthorizationServlet extends DefaultRestfulServlet {
 		String requestURI = request.getRequestURI();
 
 		boolean debug = getAuthorizer().isDebug();
-		Logger logger = debug ? Logger.getLogger(getClass().getName()) : null;
 
 		boolean login = isLogin(requestURI);
 		boolean logout = isLogout(requestURI);
 		if (debug) {
-			logger.info("Request URI: " + requestURI + ", login: " + login + ", logout: " + logout);
+			LOGGER.info("Request URI: " + requestURI + ", login: " + login + ", logout: " + logout);
 		}
 
 		if (login) {
-			String type = StringHandler.replace(requestURI, "/authorization/acs", CoreConstants.EMPTY);
-			type = type == null ? type : StringHandler.replace(type, CoreConstants.SLASH, CoreConstants.EMPTY);
-			type = StringUtil.isEmpty(type) ? null : type;
-
-			if (debug) {
-				logger.info("Type: " + type);
-			}
-
-			String url = getAuthorizer().getRedirectURLAfterProcessedResponse(request, response, type);
-			if (StringUtil.isEmpty(url)) {
-				url = CoreUtil.getServerURL(request);
-			}
-
-			response.sendRedirect(url);
+			doLogin(request, response, requestURI);
 		} else if (logout) {
-			if (debug) {
-				Enumeration<String> params = iwc.getParameterNames();
-				if (params != null) {
-					while (params.hasMoreElements()) {
-						String param = params.nextElement();
-						String value = iwc.getParameter(param);
-						logger.info("Param '" + param + "' = '" + value + "'");
-					}
-				}
-			}
-
-			if (iwc.isLoggedOn()) {
-				getWebUtil().logOut();
-			}
-
-			response.sendRedirect(CoreConstants.SLASH);
+			doLogout(iwc, response);
 		}
 	}
 
@@ -136,7 +152,7 @@ public class SAMLAuthorizationServlet extends DefaultRestfulServlet {
 				isValidURI(((HttpServletRequest) request).getRequestURI()) &&
 				response instanceof HttpServletResponse
 		) {
-			doPost((HttpServletRequest) request, (HttpServletResponse) response);
+			doHandleRequest((HttpServletRequest) request, (HttpServletResponse) response);
 			return;
 		}
 
