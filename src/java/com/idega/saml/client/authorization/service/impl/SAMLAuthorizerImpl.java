@@ -40,6 +40,7 @@ import com.idega.idegaweb.IWMainApplicationSettings;
 import com.idega.presentation.IWContext;
 import com.idega.saml.client.authorization.service.IdegaSamlAuth;
 import com.idega.saml.client.authorization.service.SAMLAuthorizer;
+import com.idega.servlet.filter.RequestResponseProvider;
 import com.idega.user.business.UserBusiness;
 import com.idega.user.data.User;
 import com.idega.util.CoreConstants;
@@ -50,6 +51,7 @@ import com.idega.util.ListUtil;
 import com.idega.util.StringHandler;
 import com.idega.util.StringUtil;
 import com.idega.util.datastructures.map.MapUtil;
+import com.idega.util.expression.ELUtil;
 import com.idega.util.xml.XmlUtil;
 import com.onelogin.saml2.Auth;
 import com.onelogin.saml2.settings.Saml2Settings;
@@ -243,7 +245,25 @@ public class SAMLAuthorizerImpl extends DefaultSpringBean implements SAMLAuthori
 				return null;
 			}
 
-			iwc.setSessionAttribute(LoggedInUserCredentials.LOGIN_TYPE, type.concat(CoreConstants.AT).concat(LoginType.AUTHENTICATION_GATEWAY.toString()));
+			HttpSession session = iwc == null ? null : iwc.getSession();
+			if (session == null) {
+				if (request != null) {
+					session = request.getSession();
+				}
+				if (session == null) {
+					RequestResponseProvider rrProvider = null;
+					try {
+						rrProvider = ELUtil.getInstance().getBean(RequestResponseProvider.class);
+					} catch (Exception e) {}
+					HttpServletRequest httpRequest = rrProvider == null ? null : rrProvider.getRequest();
+					if (httpRequest != null) {
+						session = httpRequest.getSession();
+					}
+				}
+			}
+			if (session != null && !StringUtil.isEmpty(type)) {
+				session.setAttribute(LoggedInUserCredentials.LOGIN_TYPE, type.concat(CoreConstants.AT).concat(LoginType.AUTHENTICATION_GATEWAY.toString()));
+			}
 
 			String email = null;
 			User user = null;
@@ -284,7 +304,6 @@ public class SAMLAuthorizerImpl extends DefaultSpringBean implements SAMLAuthori
 				getLogger().info("Redirect to " + redirect);
 			}
 
-			HttpSession session = request.getSession(true);
 			if (session != null) {
 				session.setAttribute(ATTR_NAME_ID, nameId);
 				session.setAttribute(ATTR_SESSION_INDEX, sessionIndex);
