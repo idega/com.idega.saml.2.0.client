@@ -397,7 +397,13 @@ public class SAMLAuthorizerImpl extends DefaultSpringBean implements SAMLAuthori
 			samlData.put(SettingsBuilder.SECURITY_LOGOUTREQUEST_SIGNED, signLogout);
 			if (signLogout) {
 				Certificate logoutCertificate = getCertificate("saml2.cert_bundle_id", "saml2.logout_cert_path_within_bundle");
-				samlData.put(SettingsBuilder.SP_X509CERT_PROPERTY_KEY, logoutCertificate);
+				if (logoutCertificate == null) {
+					if (debug) {
+						getLogger().warning("Logout certificate is not available for login type " + type);
+					}
+				} else {
+					samlData.put(SettingsBuilder.SP_X509CERT_PROPERTY_KEY, logoutCertificate);
+				}
 
 				String spPathToPrivateKey = appSettings.getProperty("saml2.logout_cert_key");
 				if (!StringUtil.isEmpty(spPathToPrivateKey)) {
@@ -460,6 +466,11 @@ public class SAMLAuthorizerImpl extends DefaultSpringBean implements SAMLAuthori
 			stream = IOUtil.getStreamFromJar(bundleIdentifierProp, pathWithinBundle);
 			if (!reTryWithDecoded) {
 				String content = StringHandler.getContentFromInputStream(stream);
+				if (content == null) {
+					getLogger().warning("Failed to get content from " + pathWithinBundle + " from bundle " + bundleIdentifierProp);
+					return null;
+				}
+
 				IOUtil.closeInputStream(stream);
 				stream = new ByteArrayInputStream(Base64Utils.decode(content.getBytes(CoreConstants.ENCODING_UTF8)));
 			}
