@@ -491,7 +491,10 @@ public class SAMLAuthorizerImpl extends DefaultSpringBean implements SAMLAuthori
 
 	@Override
 	public String getLogoutRequestURL(AuthorizationSettings settings, HttpServletRequest request, HttpServletResponse response) throws Exception {
-		Saml2Settings samlSettings = settings == null ? null : getSAMLSettings(request, settings.getType());
+		String type = settings == null ? null : settings.getType();
+		String defaultLogoutType = getApplication().getSettings().getProperty("saml2.default_logout_type", "mobile");
+		type = StringUtil.isEmpty(defaultLogoutType) ? type : defaultLogoutType;
+		Saml2Settings samlSettings = settings == null ? null : getSAMLSettings(request, type);
 		if (samlSettings == null) {
 			getLogger().warning("Invalid SAML settings, can not logout");
 			return null;
